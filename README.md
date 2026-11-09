@@ -99,13 +99,25 @@ npm run check     # 两个 lib 文件的语法检查
 - `test/unit.test.mjs` —— 关键词切分、匹配语义、语言文案、选择器契约、样式约束、宿主半空实现。
 - `test/dom.test.mjs` —— 用与 2.0.22 真实渲染同构的夹具（`panel > body > bar > header > toolbar` + `basic/extensions/bundles` 三组、含 `data-plugin-item` 卡片）验证落位、过滤、分组隐藏、退化落点、React 重挂、详情页撤走、卸载清理，以及上面那条自激循环回归。
 
-核对「本机外壳到底是什么结构」用仓库里的两个只读工具：
+核对「本机外壳到底是什么结构」，以及升级后重新验证落位：
 
 ```bash
+# 1) 只读地看外壳里写了什么契约
 node tools/asar-extract.mjs "<DSH NEXT>/resources/app.asar" list plugin-manager
-node tools/asar-extract.mjs "<DSH NEXT>/resources/app.asar" get node_modules/@deepseek-ai/dsh-client-ui-plugin-manager/lib/client.js > /tmp/upm.js
-node tools/find-in-asar.mjs "<DSH NEXT>/resources/app.asar" "[data-plugin-panel]"   # 哪个文件里写了这个契约
+node tools/find-in-asar.mjs "<DSH NEXT>/resources/app.asar" "[data-plugin-panel]"
+
+# 2) 用本次构建的 CSS / JSX 结构 + 本仓库的 bundle 生成一张可打开的「插件」页
+node tools/build-harness.mjs                 # 读默认路径的 app.asar，产出 .verify/harness.html
+#    浏览器打开 .verify/harness.html → 控制台 __boot() → __natural()（复刻 measure()）
+
+# 3) 核对已发布包与运行中宿主
+node tools/verify-installed.mjs "<某个含 node_modules 的目录>"
+node tools/probe-host-realm.mjs "JSON.stringify(Object.keys(process.versions))"   # 宿主 realm 只读探针
 ```
+
+`tools/build-harness.mjs` 直接从 `app.asar` 里取 ui-plugin-manager 的 CSS 与
+`renderGroup()` 分组名，所以外壳改结构时它跟着变 —— 漂移会以「看得见的重叠」暴露，
+而不是等用户发现搜索框跑到标题上。
 
 ## 许可
 

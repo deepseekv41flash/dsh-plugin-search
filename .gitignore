@@ -11,3 +11,7 @@ tools/verify-live.mjs
 
 # 开发期从 app.asar 里抄出来的外壳参考件（体积大、且是别人的产物）
 tools/ref/
+
+# 本机复现插件页的产物（tools/build-harness.mjs 生成）
+.verify/
+tools/ref/
