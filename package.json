@@ -1,17 +1,24 @@
 {
-  "name": "dsh-plugin-search",
+  "name": "dsh-plugin-list-search",
   "version": "0.1.0",
-  "description": "Keyword search for the DSH Plugins page — filter installed and official plugins by name, description, or package name. · 给 DSH「插件」页加上关键词搜索。",
+  "description": "Keyword search for the DeepSeek Harness Plugins page, adapted to the DSH NEXT 2.0.x measured (natural) header layout. · 给「插件」页按名称/描述/包名过滤已安装插件，适配 DSH NEXT 2.0.x 的测量式页头。",
   "type": "module",
   "main": "lib/index.js",
   "license": "MIT",
+  "author": "deepseekv41flash",
+  "contributors": [
+    {
+      "name": "huangxp12",
+      "url": "https://github.com/huangxp12/dsh-plugin-search"
+    }
+  ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/huangxp12/dsh-plugin-search.git"
+    "url": "git+https://github.com/deepseekv41flash/dsh-plugin-search.git"
   },
-  "homepage": "https://github.com/huangxp12/dsh-plugin-search#readme",
+  "homepage": "https://github.com/deepseekv41flash/dsh-plugin-search#readme",
   "bugs": {
-    "url": "https://github.com/huangxp12/dsh-plugin-search/issues"
+    "url": "https://github.com/deepseekv41flash/dsh-plugin-search/issues"
   },
   "exports": {
     ".": {
@@ -28,7 +35,6 @@
     "cordis.patch.yml",
     "README.md",
     "README.en.md",
-    "screenshots.json",
     "LICENSE"
   ],
   "dsh": {
@@ -45,7 +51,9 @@
     "dsh": ">=0.2.0-rc.2"
   },
   "scripts": {
-    "test": "node test/unit.test.mjs && node test/dom.test.mjs"
+    "check": "node --check lib/client.js && node --check lib/index.js",
+    "test": "node test/unit.test.mjs && node test/dom.test.mjs",
+    "prepublishOnly": "npm run check && npm test && npm pack --dry-run"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.0 <5"
@@ -66,6 +74,7 @@
     "dsh-plugin",
     "cordis",
     "search",
-    "plugin-manager"
+    "plugin-manager",
+    "dsh-next"
   ]
 }

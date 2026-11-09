@@ -37,7 +37,7 @@ function ok(name, condition, detail) {
 
 // ── 加载契约 ────────────────────────────────────────────────────────────────
 ok('bundle registers a row', registered !== null)
-check('bundle id', registered?.id, 'dsh-plugin-search')
+check('bundle id', registered?.id, 'dsh-plugin-list-search')
 ok('bundle exposes a factory', typeof registered?.factory === 'function')
 
 const mod = registered.factory(() => {
@@ -45,6 +45,7 @@ const mod = registered.factory(() => {
 })
 ok('factory returns exports with apply', typeof mod.apply === 'function')
 ok('exports expose __internals', typeof mod.__internals === 'object' && mod.__internals !== null)
+ok('exports declare the locale service', Array.isArray(mod.inject) && mod.inject.includes('locale'))
 
 const { splitQuery, matchesQuery, pickDict, format, DICT, SELECTORS, CSS } = mod.__internals
 
@@ -92,9 +93,14 @@ check(
 )
 check('group selector', SELECTORS.group, '[data-plugin-group]')
 ok('group selector ignores the loading skeleton', SELECTORS.group.indexOf('loading') === -1)
+// DSH NEXT 2.0.x 的页头结构：落点靠 body / bar / toolbar 三层定位。
+check('body selector (scroll container)', SELECTORS.body, '[data-plugin-body]')
+check('header wrapper selector', SELECTORS.pageBar, '[data-plugin-bar]')
+check('toolbar selector (measured header part)', SELECTORS.toolbar, '[data-plugin-toolbar]')
+ok('card selector never matches the toolbar buttons', !SELECTORS.toolbar.includes('data-plugin-package'))
 
 // ── 样式：只用主题 token，且隐藏规则存在 ────────────────────────────────────
-ok('CSS hides the hidden marker', CSS.includes('[data-dsh-plugin-search-hidden]'))
+ok('CSS hides the hidden marker', CSS.includes('[data-dsh-list-search-hidden]'))
 ok('CSS only uses dsw tokens for colors', !/#[0-9a-fA-F]{3,8}\b/.test(CSS.replace(/currentColor/g, '')))
 ok('CSS keeps the search bar out of the window drag region', CSS.includes('-webkit-app-region: no-drag'))
 

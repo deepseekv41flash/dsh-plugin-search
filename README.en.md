@@ -1,181 +1,98 @@
-# dsh-plugin-search
+# dsh-plugin-list-search
 
-Adds a **keyword search box** to the DSH Plugins page — when you have many plugins
-installed, one query finds the one you mean by name, description, or package name.
+Keyword search for the **Plugins** page of DeepSeek Harness: with dozens of plugins installed, filter installed cards by title, description, or package name as you type.
 
-[中文](README.md)
-
-![Typing "看板" leaves one matching card in each group; the query and the count sit on the search bar](docs/preview.svg)
+This is a **DSH NEXT 2.0.x adaptation fork** of [huangxp12/dsh-plugin-search](https://github.com/huangxp12/dsh-plugin-search). The upstream placement overlaps the page title on 2.0.x's measured header; this fork uses two safe anchors and keeps every other behaviour (matching rules, counter, clearing, remount resilience) unchanged.
 
 ## What it does
 
-Injects a search bar under the Plugins page header (sidebar → **Plugins**) and filters
-the cards as you type:
+It injects one search row into the Plugins page header and filters cards as you type:
 
-- **Match scope**: all visible text on a card (title, description, the "Experimental"
-  tag) plus the package name or registration id behind it.
-- **Matching**: case-insensitive substring. Space-separated terms are **AND** —
-  `task board` requires both.
-- **Group hiding**: a group with no hits is hidden together with its heading and count,
-  instead of leaving an empty "Official 0" shell behind.
-- **Count**: `shown / total` beside the field; "No matching plugins" when nothing hits.
-- **Clearing**: the × button or `Esc` (`Esc` is consumed here, so it will not close the
-  shell panel behind it).
-- **Follows the UI language**: Chinese copy on a Chinese interface, English otherwise.
+- **Haystack**: all visible card text (title, description, status tag) plus the `data-plugin-package` / `data-plugin-item` value, so package names are searchable even when they are not rendered.
+- **Matching**: case-insensitive substring matching. Space-separated terms are **AND**ed (`taskboard 看板` needs both).
+- **Group hiding**: a group with no hit hides its heading too — no empty "Basic 0" shells.
+- **Counter**: `shown / total` at the right of the search row; "No matching plugins" when nothing hits.
+- **Clearing**: the × button or `Esc`. `Esc` is consumed in place so it does not close the shell's panel.
+- **Locale**: Chinese UI gets Chinese copy, everything else English.
+
+## Why this fork exists
+
+In DSH NEXT 2.0.x the plugin page header is **measured**: after mount, `measure()` writes `--plugin-part-x/-y/-width` for every `[data-plugin-header-part]` (title / intro / toolbar / tabs), then:
+
+- `[data-plugin-bar]` gets `data-natural`;
+- `.pageHeading` becomes `display: contents`;
+- header parts become absolutely positioned while the header keeps a fixed `--plugin-header-rest-height` plus a `clip-path`.
+
+Upstream appends the search row into `header.firstElementChild` (`.pageHeading`). On 2.0.x that takes the row out of the measured flow and pins it to the header's top-left corner, directly **over the title**. Measured on DSH NEXT 2.0.22 / kernel 0.2.2-rc.1, reproducing the shell's own CSS and JSX structure:
+
+```
+titleRect  = { x: 274, y: 28, w: 234, h: 28 }
+searchRect = { x: 274, y: 38, w: 212, h: 32 }   # intersects the title
+```
+
+## Placement strategy
+
+1. **Inside `[data-plugin-toolbar]`** (the "Refresh / Add plugin" row) when it exists and is visible. The toolbar is itself a measured, positioned header part, so adding a child can only widen it — never fight the title for space — and it stays visible while the sticky header is on screen.
+2. **A row under the header** as a fallback: appended to `[data-plugin-body]` right after `[data-plugin-bar]` when the toolbar is missing or `hidden` (other tabs).
+
+Both branches also refuse to treat the search row itself as the insertion anchor: `insertBefore(bar, bar)` would keep emitting `childList` mutations back into the `MutationObserver` and spin the renderer (observed as a hang). The guard lives in `findSlot()`, with a defensive return in `place()`, and `test/dom.test.mjs` pins it with an `insertBefore` counter.
 
 ## Install
 
 ```bash
-dsh plugin --profile web add github:huangxp12/dsh-plugin-search
+dsh plugin --profile desktop add dsh-plugin-list-search
 ```
 
-`--profile` is required — omitting it fails with
-`required option '--profile <name>' not specified`. `web` is the standard Web profile's
-name; `dsh web` is shorthand for `dsh --profile web`. Substitute your own profile name if
-you run a differently-named one. Reload the page afterwards: a client plugin needs no
-restart.
+`--profile` is required; `desktop` is the DSH NEXT desktop shell profile (use `web` for the web profile). Refresh the page afterwards — client plugins need no restart.
 
-Or mount it by hand on an existing profile (e.g. `~/.dsh/profiles/desktop`):
+Manual mount into an existing profile (e.g. `~/.dsh/profiles/desktop`):
 
-1. Put the package inside the profile's `node_modules` (a junction works):
-
-   ```powershell
-   New-Item -ItemType Junction `
-     -Path "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-plugin-search" `
-     -Target "<path to this checkout>"
-   ```
-
-2. Append to that profile's `cordis.patch.yml`:
+1. Put this package in the profile's `node_modules` (a junction is fine on Windows).
+2. Append to the profile's `cordis.patch.yml`:
 
    ```yaml
    - insert:
-       - id: plugin-search
-         name: 'dsh-plugin-search'
+       - id: plugin-list-search
+         name: 'dsh-plugin-list-search'
    ```
 
-3. Reload the page (with HMR on, the patch file itself is watched, so a restart is
-   usually unnecessary).
+3. Reload the page.
 
-Rollback: delete those two lines and the `node_modules\dsh-plugin-search` junction.
+**Rollback**: remove those two lines and the junction (`dsh plugin --profile desktop remove dsh-plugin-list-search`). With an empty query the page DOM is exactly what the shell renders, so nothing is left behind.
 
 ## What it does NOT do
 
-It only reads and writes what is displayed; it never touches state:
+It only changes display state in the DOM:
 
-- no network requests, no reading or writing session logs;
-- no changes to plugin enablement — it does not install, uninstall, or toggle anything;
-- no changes to plugin configuration;
-- with an empty query the page's DOM is exactly what the shell rendered (every hidden
-  marker is removed).
+- no network requests, no session log reads or writes;
+- no Loader enable/disable, no install or uninstall;
+- no plugin configuration changes.
 
-The host half (`lib/index.js`) has an empty `apply()`: its only purpose is to make this
-package an **enabled Loader entry** — client bundles are served for enabled entries only.
+The host half (`lib/index.js`) has an empty `apply()`: it exists only so the package is an enabled Loader entry, which is what makes the client bundle available.
 
-## How it works
+## Compatibility
 
-### Why DOM injection rather than a slot registration
-
-The Plugins page belongs to `@deepseek-ai/dsh-client-ui-plugin-manager`. It declares only
-four extension points:
-
-| Slot | Purpose |
-| --- | --- |
-| `plugins.item` | **Add** a card for an official plugin |
-| `plugins.bundle.config` | One bundle's configuration, rendered on its detail page |
-| `plugins.row.config` | One row's configuration |
-| `plugins.detail.{actions,badge,section}` | A detail page's header actions, tags, sections |
-
-**There is no slot for a list-level toolbar.** And the page's `main` slot is keyed, with
-`"plugins"` already taken by the page itself — taking the slot route would mean replacing
-its whole UI, i.e. shadowing shipped UI: it breaks on upgrade and would require
-reimplementing the install dialog and every package's configuration page. That is not a
-price a search box should pay.
-
-So this plugin uses the same approach as `dshmarket`'s `settings-nav-icon`: it targets the
-`data-*` contract the page writes itself, injects the search bar, and toggles card
-visibility by keyword.
-
-### The DOM contract it relies on
-
-| Selector | Meaning |
-| --- | --- |
-| `[data-plugin-panel]` | Page root; only the list view has a direct child `<header>`, so detail pages naturally have no search box |
-| `[data-plugin-group="official"\|"bundles"]` | A group; hidden entirely when it has no hits |
-| `[data-plugin-package="<name>"]` | An installed/official bundle card |
-| `[data-plugin-item="<id>"]` | An official plugin card (one that registered a config page) |
-
-These are attributes the shell writes in its own JSX — its outward DOM contract, stable
-against rebuilds, unlike the **hashed CSS-module class names** (`fO69Vq_page` and friends),
-none of which this plugin uses. If the shell changes, the worst case is a missing search
-box, not a broken page.
-
-### Surviving remounts
-
-The shell's list is React-rendered: first load, switching list/detail, and installing or
-uninstalling plugins all remount cards or the whole panel. Therefore:
-
-- a `MutationObserver` (on `document.body`, covering the panel itself being unmounted and
-  rebuilt) drives re-synchronisation, with `queueMicrotask` coalescing mutations within a
-  frame;
-- the query lives inside the `ctx.effect` closure rather than in a DOM node — after React
-  replaces the cards the filter recomputes and the typed half is not lost;
-- repositioning moves a DOM node (which breaks focus), so focus and caret position are
-  saved before the move and restored after;
-- the stylesheet is re-asserted on every sync (so it comes back if `<head>` is rebuilt)
-  instead of being inserted once in `apply()`.
-
-### Visuals
-
-All colours and radii come from the shell's theme tokens (`--dsw-alias-*`), so light/dark
-follows automatically with no hard-coded values.
-
-The bar carries **`data-window-drag-recall`**: the header is a window-drag region on
-desktop (the shell marks the `<header>` with `data-window-drag`, making the whole block
-draggable on macOS), and the shell provides this inverse marker for interactive content
-inside it (`[data-window-drag-recall]{-webkit-app-region:no-drag}`). Using it is more
-reliable than restating the rule in our own stylesheet: even before our `<style>` lands,
-the shell's rule already applies, so clicking the field can never start a window drag.
+| Shell | Status | Evidence |
+| --- | --- | --- |
+| DSH NEXT 2.0.22 (kernel 0.2.2-rc.1) | ✅ measured | Page structure and CSS taken from the local `app.asar`, verified in real Chrome |
+| Other DSH NEXT 2.0.x builds exposing `data-plugin-body` / `data-plugin-bar` / `data-plugin-toolbar` | ✅ expected | Anchors are attribute-based, not class- or version-based |
+| DSH 0.1.x / older shells without the measured header | ⚠️ untested | Falls back to placement 2; filtering is unaffected |
+| Web profile (`dsh web`) | ⚠️ untested | No desktop-shell API is used |
 
 ## Development
 
 ```bash
-# Pure logic (query splitting, matching, copy) + loading contract: 41 checks
-node test/unit.test.mjs
-
-# DOM behaviour (jsdom; the fixture copies ui-plugin-manager's real structure): 47 checks
-node test/dom.test.mjs
-
-# A browser harness you can also just open: test/dom-harness.html (43 checks, run in Chrome)
+npm test          # unit (pure logic + load contract) + dom (jsdom behaviour)
+npm run check     # syntax check both lib files
 ```
 
-Neither suite starts a GUI: `unit` installs a minimal `__ModuleLoader__` to capture the row
-the bundle registers, and `dom` builds a DOM isomorphic to the real page in jsdom and
-asserts the filtering behaviour. The fixture's structure and `data-*` attributes are the
-contract the code under test navigates by — if the fixture changes and `lib/client.js`
-does not follow, the tests are supposed to go red.
+Read-only helpers for checking what the local shell actually renders:
 
-A fourth, end-to-end suite (`tools/verify-live.mjs`, 17 checks) confirms against a running
-`dsh web` that the host reports this package in its boot graph, serves its bundle
-byte-identically, and leaves `/` and `/api` auth unchanged. It is **not shipped in this
-repository** on purpose: to reach the local GUI it signs a loopback session cookie with the
-`client-connection/browser-session` secret from `~/.dsh/.credentials.yaml`, and a plugin
-repository is the wrong place to keep a file that reads credentials — however benign, it is
-exactly the shape a reviewer is right to look twice at. Recreate it locally if you want the
-check; the three suites above need no credentials and cover the plugin's own behaviour.
+```bash
+node tools/asar-extract.mjs "<DSH NEXT>/resources/app.asar" list plugin-manager
+node tools/find-in-asar.mjs "<DSH NEXT>/resources/app.asar" "[data-plugin-panel]"
+```
 
-### Files
+## License
 
-- `lib/client.js` — the browser half, a hand-written bundle
-  (`window.__ModuleLoader__.load({id, factory})`) with **no build chain**: `require("react")`
-  and friends are served by the shell's module table, and this plugin does not even need
-  React.
-- `lib/index.js` — the host half; `apply()` is empty.
-- `test/` — the two test suites plus `dom-harness.html`, openable in a browser.
-- `docs/preview.svg` — the preview, generated by `tools/render-preview.mjs` running the
-  real `lib/client.js` (not a hand-drawn mock): after typing "看板", one matching card
-  remains in each group and the bar reads `2 / 9`.
-- `tools/asar-extract.mjs` — a read-only tool for reading shell sources out of `app.asar`
-  (used during development to verify ui-plugin-manager's DOM contract); unrelated to
-  running the plugin.
-- `tools/render-preview.mjs` — regenerates `docs/preview.svg` and `assets/screenshot-1.png`
-  by driving the real bundle in jsdom, so the screenshots cannot drift from the code.
+MIT. Derived from [huangxp12/dsh-plugin-search](https://github.com/huangxp12/dsh-plugin-search) (MIT): layout and interaction design come from upstream, placement and the 2.0.x adaptation are rewritten here.
