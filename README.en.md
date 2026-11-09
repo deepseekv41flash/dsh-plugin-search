@@ -74,10 +74,20 @@ The host half (`lib/index.js`) has an empty `apply()`: it exists only so the pac
 
 | Shell | Status | Evidence |
 | --- | --- | --- |
-| DSH NEXT 2.0.22 (kernel 0.2.2-rc.1) | ✅ measured | Page structure and CSS taken from the local `app.asar`, verified in real Chrome |
+| DSH NEXT 2.0.22 desktop shell (kernel 0.2.2-rc.1, ui-plugin-manager 0.2.2-rc.1) | ✅ measured | Page structure and CSS taken from the local `app.asar`, verified in real Chrome |
+| `dsh web` 0.2.2-rc.1 (browser) | ✅ measured | Live `dsh --profile web` host: 13 cards / 3 groups, `pet` -> `1 / 13`, `dsh` -> `8 / 13`, no hit -> "No matching plugins", `Esc` clears |
 | Other DSH NEXT 2.0.x builds exposing `data-plugin-body` / `data-plugin-bar` / `data-plugin-toolbar` | ✅ expected | Anchors are attribute-based, not class- or version-based |
-| DSH 0.1.x / older shells without the measured header | ⚠️ untested | Falls back to placement 2; filtering is unaffected |
-| Web profile (`dsh web`) | ⚠️ untested | No desktop-shell API is used |
+| DSH 0.1.x / older shells without the measured header | ⚠️ untested | Falls back to a row under the header; filtering is unaffected |
+
+## 0.1.1: why the resync is rate-limited
+
+0.1.0 coalesced resyncs with `queueMicrotask`, so every mutation on `document.body` turned into an immediate `sync()` that itself writes layout (inserting the row, hiding cards). While the shell mounts the Plugins page it emits a burst of React mutations, and the two fed each other:
+
+```
+shell churn -> mutation -> our sync -> layout writes -> shell re-render -> more mutations -> ...
+```
+
+On `dsh --profile web` (0.2.2-rc.1) that froze the renderer when opening the Plugins page: a probe counted 400+ syncs in about a second, while the same page **without the plugin** produced zero mutations per second. Replacing the observer with a 250 ms poll made the same code behave, so `schedule()` now samples with `setTimeout(..., 60ms)`. `test/dom.test.mjs` waits in 60 ms steps and pins the stable-anchor invariant with an `insertBefore` counter.
 
 ## Development
 

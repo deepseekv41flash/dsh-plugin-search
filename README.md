@@ -36,6 +36,18 @@ searchRect = { x: 274, y: 38, w: 212, h: 32 }   ← 与标题相交
 1. **优先 `[data-plugin-toolbar]` 内**（「刷新 / 添加插件」那一行）：工具条本身就是一个被 `measure()` 定位的页头部件，往里加子元素只会让它变宽，不可能与标题抢位置；页头粘住时搜索框也跟着在。
 2. **退化到页头下方一行**：工具条不存在或被 `hidden`（非「已安装」页签）时，作为 `[data-plugin-body]` 的子节点插在 `[data-plugin-bar]` 之后 —— 同样落在被绝对定位的部件之外。
 
+## 0.1.1：为什么重算要限速（0.1.0 会卡死 webui）
+
+0.1.0 用 `queueMicrotask` 合并重算：`document.body` 上每一个 mutation 都会立刻换算出一次 `sync()`，而 `sync()` 自己要做布局写入（插入/摘除搜索条、给卡片打隐藏标记）。外壳挂载「插件」页时本来就会连发一大批 React mutation，于是形成
+
+```
+外壳图表抖动 → mutation → 我们的 sync → 布局写入 → 外壳再渲染 → 更多 mutation → …
+```
+
+实测在 `dsh --profile web`（0.2.2-rc.1）上打开「插件」页会把渲染线程卡死：探针记录到 1 秒内 400+ 次 sync（同一页面**不装插件**时 1 秒内 0 次 mutation）。把同一份代码的 observer 换成 250ms 轮询后完全正常，据此把 `schedule()` 改成 `setTimeout(..., 60ms)` 限速采样：外壳抖得再密，我们也只按固定节奏看一次当前 DOM。
+
+回归保障：`test/dom.test.mjs` 的 `settle()` 按 60ms 采样节奏等待，另有一条 `insertBefore` 计数断言守住「落点稳定后不再搬动」。
+
 另外把「锚点排除自己」做成了硬约束：插入前如果锚点就是搜索条本身，`insertBefore(bar, bar)` 会持续产生 `childList` mutation 并喂回 `MutationObserver`，形成自激循环（实测会把渲染进程卡死）。两个落点分支都跳过自己，`place()` 里还有一道防御性 return，`test/dom.test.mjs` 用 `insertBefore` 计数守住这条。
 
 ## 安装
@@ -84,10 +96,10 @@ dsh plugin --profile desktop add dsh-plugin-list-search
 
 | 外壳 | 状态 | 依据 |
 | --- | --- | --- |
-| DSH NEXT 2.0.22（内核 0.2.2-rc.1） | ✅ 实测 | 用本机 `app.asar` 里的 ui-plugin-manager CSS/JSX 复现页面结构，在真实 Chrome 里验证落位不重叠与过滤行为 |
+| DSH NEXT 2.0.22 桌面壳（内核 0.2.2-rc.1，ui-plugin-manager 0.2.2-rc.1） | ✅ 实测 | 用本机 `app.asar` 的 CSS/JSX 复现页面结构，真实 Chrome 验证落位不重叠与过滤 |
+| `dsh web` 0.2.2-rc.1（浏览器） | ✅ 实测 | 真机 `dsh --profile web` 上打开「插件」页：13 张卡 / 3 个分组，`pet` → `1 / 13`、`dsh` → `8 / 13`、无命中 → 「没有匹配的插件」、`Esc` 清空恢复 |
 | DSH NEXT 2.0.x 其他版本（有 `data-plugin-body` / `data-plugin-bar` / `data-plugin-toolbar`） | ✅ 预期可用 | 落点按属性探测，不依赖类名与版本号 |
-| DSH 0.1.x / 没有测量式页头的旧外壳 | ⚠️ 未验证 | 会退化到第 2 落点（页头下方一行），功能不受影响，只是位置不同 |
-| Web profile（`dsh web`） | ⚠️ 未验证 | 代码不依赖桌面壳 API，理论上一致 |
+| DSH 0.1.x / 没有测量式页头的旧外壳 | ⚠️ 未验证 | 会退化到页头下方一行，功能不受影响，只是位置不同 |
 
 ## 开发与测试
 

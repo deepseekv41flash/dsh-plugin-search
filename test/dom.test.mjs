@@ -215,7 +215,12 @@ rec('apply() did not throw', applyError === null, applyError && applyError.stack
 // ── 辅助 ────────────────────────────────────────────────────────────────────
 const BAR = '[data-dsh-list-search]'
 const HID = 'data-dsh-list-search-hidden'
-const settle = async () => { await new Promise((r) => setTimeout(r, 0)); await new Promise((r) => setTimeout(r, 0)) }
+// 重算是限速的（SYNC_INTERVAL_MS = 60ms，见 lib/client.js 的 schedule()），
+// 所以每个 settle 至少跨过两轮采样。
+const settle = async () => {
+  await new Promise((r) => setTimeout(r, 90))
+  await new Promise((r) => setTimeout(r, 90))
+}
 const q = (sel) => document.querySelector(sel)
 const qa = (sel) => [...document.querySelectorAll(sel)]
 const allCards = () => qa('[data-plugin-package], [data-plugin-item]')
